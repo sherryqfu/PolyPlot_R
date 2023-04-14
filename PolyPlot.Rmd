@@ -107,17 +107,25 @@ Z <- plane_data$Z
 # 2. Plot 
 ```{r}
 figure <- plot_ly() %>%
-  add_surface(x = x, y = y, z = z, colorscale = "Viridis", showscale = FALSE) %>%
-  add_surface(x = xx, y = yy, z = Z, colorscale = list(c(0, 1), c("rgb(254, 254, 254)", "rgb(254, 254, 254)")), showscale = FALSE, opacity = 0.65) %>%
-add_trace(x = X[, 1], y = Y[, 1], z = Z[, 1], type = "scatter3d", mode = "lines", line = list(color = "rgba(50, 50, 50, 0.5)", width = 2)) %>%
-  layout(scene = list(xaxis = list(nticks = 5, range = c(-2, 2)),
-                    yaxis = list(nticks = 5, range = c(-2, 2)),
-                    zaxis = list(nticks = 5, range = c(1, 5), tickmode = "linear", tick0 = 1, dtick = 1), showbackground = FALSE),
-       margin = list(r = 20, l = 10, b = 10, t = 10),
-       font = list(family = "Times New Roman"))
+  add_surface(x = x, y = y, z = z, colorscale = list(list(0, "rgba(150, 150, 150, 0.1)"), list(1, "rgba(150, 150, 150, 0.1)")), showscale = FALSE, 
+              contours = list(x = list(show = TRUE, color = "rgba(100,100,100, 0.8)", width = 1, usecolormap = FALSE, start = -3, end = 3, size = 0.2),
+                              y = list(show = TRUE, color = "rgba(100,100,100, 0.8)", width = 1, usecolormap = FALSE, start = -3, end = 3, size = 0.2),
+                              z = list(show = FALSE))) %>%
+  add_surface(x = xx, y = yy, z = Z, colorscale = list(list(0, "rgb(180, 255, 180)"), list(1, "rgb(180, 255, 180)")), showscale = FALSE, opacity = 0.5, contours = list(z = list(show = FALSE))) %>%
+add_trace(x = X[, 1], y = Y[, 1], z = Z[, 1], type = "scatter3d", 
+          mode = "lines", line = list(color = "rgba(188, 201, 151, 0.9)", width = 2, dash = "solid"), 
+          surface = list(show = TRUE, fill = "toself", color = "rgba(188, 201, 151, 0.5)", opacity = 0.1),
+          showlegend = FALSE) %>%
+  add_trace(x = c(2, 2), y = c(2, 2), z = c(1, 5), type = "scatter3d", mode = "lines", line = list(color = "black", width = 1), showlegend = FALSE) %>%
+  add_trace(x = c(2, 2), y = c(-2, -2), z = c(1, 5), type = "scatter3d", mode = "lines", line = list(color = "black", width = 1), showlegend = FALSE) %>%
+  layout(scene = list(xaxis = list(nticks = 5, range = c(2, -2), showbackground = FALSE, showgrid = FALSE, showline = TRUE, zeroline = FALSE),
+                      yaxis = list(nticks = 5, range = c(2, -2),showbackground = FALSE, showgrid = FALSE,showline = TRUE, zeroline = FALSE),
+                      zaxis = list(nticks = 5, range = c(1, 5), tickmode = "linear", tick0 = 1, dtick = 1, showbackground = FALSE, showgrid = 
+                                     TRUE,showline = TRUE)),
+         margin = list(r = 20, l = 10, b = 10, t = 10),
+         font = list(family = "Times New Roman"))
 
 figure
 
 ```
-
 
