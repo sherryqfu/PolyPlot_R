@@ -1,0 +1,720 @@
+---
+title: "testing poly"
+author: "Sherry"
+date: "2022-10-02"
+output: html_document
+---
+```{r}
+library(lmerTest)
+library(texreg)
+library(tidyverse)
+library(simglm)
+library(lme4)
+options(scipen=999)
+```
+
+
+#https://cran.r-project.org/web/packages/simglm/vignettes/tidy_simulation.html
+
+## 1. regression (single level) - non polynomial terms are sig, but sig block variable
+```{r}
+library(tidyverse)
+library(simglm)
+library(future)
+# The simulation setup
+sim_args <- list(
+  formula = y_post ~ 1 + y_c1 + y_c2 + x1*x2 # The formula
+  , fixed = list( # Regression variables
+    y_post = list(var_type = "continuous", dist = "rnorm", mean = 4, sd = 2)
+    , y_c1 = list(var_type = "continuous", dist = "rnorm", mean = 4, sd = 1),
+      y_c2 = list(var_type = "continuous", dist = "rnorm", mean = 3, sd = 1.5)
+    , x1 = list(var_type = "continuous", dist = "rnorm", mean = 3, sd = 2)
+    , x2 = list(var_type = "continuous", dist = "rnorm", mean = 3, sd = 2)
+  )
+  , sample_size = 1000
+  , error = list(variance = 5^2) # Residual variance
+  , reg_weights = c( # The coefficients
+    10,   # Intercept
+     0.85, # y_c1
+    0.4, # y_c2
+     -0.2,# x1
+     0.1, # x2
+     0.1 # x1:x2
+  )
+ # , replications = 1000 # Number of replications
+#  , extract_coefficients = TRUE
+#  , model_fit = list(formula = y_post ~ 1 + y_pre + x1*x2, model_function = "lm")
+#  , power = list( # Hypothesis test for the coefficients
+#    dist = "qt"
+#    , alpha = 0.05
+#    , opts = list(df = 100 - 5)
+  )
+#)
+
+plan(multisession, workers = 10)
+
+#res <- replicate_simulation(sim_args, future.seed = 142857) %>%
+#  compute_statistics(sim_args, type_1_error = FALSE, precision = FALSE)
+
+
+testdata <- simulate_fixed(data = NULL, sim_args) %>%
+  simulate_error(sim_args) %>%
+  generate_response(sim_args)
+
+fit_linear_0 <- lm(y_post ~ 1 + y_c1 + y_c2 + x1*x2,
+            data = testdata)
+summary(fit_linear_0)
+
+testdata_b <- testdata %>%
+  mutate(x1_sq = x1^2,
+         int = x1*x2,
+         x2_sq = x2^2)
+
+fit_linear_1 <- lm(y_post ~ 1 +  y_c1 + y_c2 +  x1 + x2 + x1_sq + int + x2_sq,
+            data = testdata_b)
+summary(fit_linear_1)
+
+
+x_coef <- coef(fit_linear_1)[4]
+y_coef <- coef(fit_linear_1)[5]
+xsq_coef <- coef(fit_linear_1)[6]
+int_coef <- coef(fit_linear_1)[7]
+ysq_coef <- coef(fit_linear_1)[8]
+
+testdata_bl <- testdata_b %>%
+  mutate(alpha =  x_coef*x1 + y_coef*x2 + 
+         xsq_coef*x1_sq + int_coef*int + ysq_coef*x2_sq )
+
+fit_linear_2 <- lm(y_post ~ 1 + y_c1 + y_c2  + alpha,
+            data = testdata_bl)
+summary(fit_linear_2)
+
+library(writexl)
+write_xlsx(testdata_bl, "testdata_bl.xlsx")
+
+data_cor <- testdata_bl %>%
+  dplyr::select(x1, x2, x1_sq, int, x2_sq)
+
+data_cor %>%
+select(x1, x2, x1_sq, int, x2_sq) %>%
+cor(.)
+```
+
+```{r}
+fixed <- ~ 1 + act + diff + numCourse_o + act:numCourse_o
+fixed_param <- c(2, 4, 1, 3.5, 2)
+cov_param <- list(dist_fun = c('rt', 'rgamma'),
+                  var_type = c("single", "single"),
+                  opts = list(list(df = 5),
+                              list(shape = 2)))
+fact_vars <- list(numlevels = 5, var_type = "single")
+n <- 150
+error_var <- 3
+with_err_gen = 'rnorm'
+cor_vars <- 0.6
+temp_single_o <- sim_reg(fixed = fixed, fixed_param = fixed_param, 
+                         cov_param = cov_param, n = n, 
+                         error_var = error_var,
+                         with_err_gen = with_err_gen, data_str = "single", 
+                         cor_vars = cor_vars, fact_vars = fact_vars)
+cor(temp_single_o[, 2:3])
+```
+
+## 2. ML estimation
+```{r}
+library(tidyverse)
+library(simglm)
+library(future)
+# The simulation setup
+sim_args <- list(
+  formula = y_post ~ 1 + y_c1 + y_c2 + x1*x2 + (1 | id), # The formula
+   fixed = list( # Regression variables
+    y_post = list(var_type = "continuous", dist = "rnorm", mean = 4, sd = 2)
+    , y_c1 = list(var_type = "continuous", dist = "rnorm", mean = 4, sd = 1),
+      y_c2 = list(var_type = "continuous", dist = "rnorm", mean = 3, sd = 1.5)
+    , x1 = list(var_type = "continuous", dist = "rnorm", mean = 3, sd = 2)
+    , x2 = list(var_type = "continuous", dist = "rnorm", mean = 3, sd = 2)
+  ),
+  reg_weights = c( # The coefficients
+    10,   # Intercept
+     0.5, # y_c1
+    0.5, # y_c2
+     -0.3,# x1
+     0.1, # x2
+     0.1 # x1:x2
+  ),
+  randomeffect = list(int_id = list(variance = 3, var_level = 2)),
+  error = list(variance = 25), # Residual variance
+   # correlate = list(fixed = 
+   #               data.frame(x = c('y_c1', 'y_c1', 'y_c1','y_c2','y_c2', 'x1'), 
+   #                          y = c('y_c2', 'x1', 'x2', 'x1', 'x2', 'x2'), 
+   #                          corr = c(0.1, 0.2, -0.3, 0.1, -0.2, 0.1))),
+  sample_size = list(level1 = 30, level2 = 150)
+
+
+  )
+
+
+nested_data <- sim_args %>%
+  simulate_fixed(data = NULL, .) %>%
+  #correlate_variables(sim_args) %>%
+  simulate_randomeffect(sim_args) %>%
+  simulate_error(sim_args) %>%
+  generate_response(sim_args)
+
+
+
+fit_linear_0 <- lmer(y_post ~ 1 + y_c1 + y_c2 + x1*x2 + (1|id),
+            data = nested_data)
+summary(fit_linear_0)
+
+nested_b <- nested_data %>%
+  mutate(x1_sq = x1^2,
+         int = x1*x2,
+         x2_sq = x2^2)
+
+fit_linear_1 <- lmer(y_post ~ 1 +  y_c1 + y_c2 +  x1 + x2 + x1_sq + int + x2_sq + (1 + x1 |id),
+            data = nested_b,
+            REML = FALSE)
+summary(fit_linear_1)
+
+nested_bl <- nested_b %>%
+  mutate(x1_sq = x1^2,
+         int = x1*x2,
+         x2_sq = x2^2) %>%
+  mutate(block = (-0.135689)*x1 + ( 0.567552)*x2 + (-0.001686)*x1_sq + (0.080726 )*int+ 
+           (-0.026340)*x2_sq)
+
+
+fit_linear_2 <- lmer(y_post ~ 1 + y_c1 + y_c2  + block + (1 + block|id),
+            data = nested_bl, 
+            REML = FALSE)
+summary(fit_linear_2)
+
+library(writexl)
+write_xlsx(nested_data, "testdata.xlsx")
+```
+
+### 2.1 correlated fixed effects
+https://cran.r-project.org/web/packages/simglm/vignettes/simulation_arguments.html
+```{r}
+sim_args <- list(formula = y ~ 1 + y_c1 + y_c2 + x1 + x2 + I(x1^2) + (1 | id), 
+                 fixed = list(y_c1 = list(var_type = 'continuous',
+                                         mean = 4, 
+                                         sd = 1),
+                              y_c2 = list(var_type = 'continuous',
+                                         mean = 2, 
+                                         sd = .5),
+                              x1 = list(var_type = 'continuous',
+                                         mean = 3, 
+                                         sd = 1),
+                              x2 = list(var_type = 'continuous',
+                                         mean = 3, 
+                                         sd = 2)),
+                 reg_weights = c( 
+    10,   # Intercept
+     0.2, # y_c1
+     0.1, # y_c2
+     -0.205,# x1
+     -0.114, # x2
+     0.394
+  ),
+                  randomeffect = list(int_id = list(variance = 3, var_level = 2)),
+                 error = list(variance = 5^2), # Residual variance
+                 correlate = list(fixed = 
+                  data.frame(x = c('y_c1', 'y_c1', 'y_c1','y_c1', 
+                                   'y_c2','y_c2','y_c2',
+                                   'x1','x1',
+                                   'x2'), 
+                            y = c('y_c2', 'x1', 'x2', 'I(x1^2)',
+                                  'x1', 'x2','I(x1^2)',
+                                  'x2', 'I(x1^2)',
+                                  'I(x1^2)'), 
+                            corr = c(-0.2, 0.1, -0.1, 0.1, 
+                                     0.1, -0.1, 0.1,
+                                     0.7, 0.8,
+                                     0.4))),
+                sample_size = list(level1 = 20, level2 = 100))
+
+correlate_attribute <- simulate_fixed(data = NULL, sim_args) %>%
+  correlate_variables(sim_args) %>%
+  simulate_randomeffect(sim_args) %>%
+  simulate_error(sim_args) %>%
+  generate_response(sim_args)
+
+head(correlate_attribute)
+select(correlate_attribute, -X.Intercept., -level1_id, id) %>%
+cor(.)
+
+
+fit_linear_0 <- lmer(y ~ 1 + y_c1 + y_c2 + x1 + I(x1^2) + (1|id),
+            data = correlate_attribute)
+summary(fit_linear_0)
+
+nested_b <- correlate_attribute %>%
+  mutate(x1_c = x1 - 3,
+         x2_c = x2 - 3,
+         x1_sq = x1_c^2,
+         int = x1_c*x2_c,
+         x2_sq = x2_c^2)
+
+fit_linear_1 <- lmer(y ~ 1 +  y_c1 + y_c2 +  x1_c + x2_c + x1_sq + int + x2_sq + (1|id),
+            data = nested_b)
+summary(fit_linear_1)
+
+nested_bl <- nested_b %>%
+  mutate(block = (-0.052997)*x1_c + (-0.227754  )*x2_c + 
+           (-0.044442 )*x1_sq + (0.052079 )*int+ 
+           ( -0.009115 )*x2_sq)
+
+select(nested_bl, -X.Intercept., -level1_id, -id, -int_id, -error, -fixed_outcome, -random_effects) %>%
+cor(.)
+
+fit_linear_2 <- lmer(y ~ 1 + y_c1 + y_c2  + block + (1|id),
+            data = nested_bl)
+summary(fit_linear_2)
+
+library(writexl)
+write_xlsx(correlate_attribute, "testdata.xlsx")
+
+```
+
+
+### 2.2 Random effect 
+```{r}
+# set seed
+set.seed(321) 
+
+# set parameters of model to be simulated
+sim_arguments <- list(
+  formula = m ~ 1 + time + x + y + z + weight + age + sex + (1 + time | id), 
+  reg_weights = c(4, 0.5, 0.3, 0.8, 0.5, 0.02, 0.1, 0.1),
+  fixed = list(time = list(var_type = 'time'),
+               x = list(var_type = 'continuous', mean = 0, sd = 2),
+               y = list(var_type = 'continuous', mean = 0, sd = 2),
+               z = list(var_type = "continuous", mean = 0, sd = 1),
+               weight = list(var_type = 'continuous', mean = 180, sd = 30),
+               age = list(var_type = 'ordinal', levels = 30:60),
+               sex = list(var_type = 'factor', levels = c('male', 'female'))
+               ),
+  randomeffect = list(int_id = list(variance = 5, var_level = 2),
+                      time_id = list(variance = 3, var_level = 2)),
+   missing_data = list(new_outcome = 'm_missing', miss_cov = 'weight', 
+                      mar_prop = seq(from = 0, to = .9, length.out = 3000),
+                      type = 'mar'),
+  sample_size = list(level1 = 15, level2 = 200)
+)
+
+# simulate data
+data_w_missing <- sim_arguments %>%
+  simulate_fixed(data = NULL, .) %>%
+  simulate_randomeffect(sim_arguments) %>%
+  simulate_error(sim_arguments) %>%
+  generate_response(sim_arguments) %>%
+  generate_missing(sim_arguments)
+
+prop.table(table(is.na(data_w_missing$m_missing)))
+```
+
+## 2.3 FINAL_high correlation among random effects
+```{r}
+# set seed
+set.seed(1) 
+# set parameters of model to be simulated
+sim_arguments <- list(
+  formula = m ~ 1 +  x + y + z + (1 + x + y| id), 
+  reg_weights = c(4, -0.10394, -0.01168, 0.1),
+  fixed = list(#time = list(var_type = 'time'),
+               x = list(var_type = 'continuous', mean = 0, sd = 2),
+               y = list(var_type = 'continuous', mean = 0, sd = 2),
+               z = list(var_type = "continuous", mean = 0, sd = 1)
+               #weight = list(var_type = 'continuous', mean = 180, sd = 30),
+               #age = list(var_type = 'ordinal', levels = 30:60),
+               #sex = list(var_type = 'factor', levels = c('male', 'female'))
+               ),
+  randomeffect = list(int_id = list(variance = 0.03, var_level = 2),
+                      x_id = list(variance = 0.01, var_level =2),
+                      y_id = list(variance = 0.02, var_level =2)),
+  # missing_data = list(new_outcome = 'm_missing', miss_cov = 'weight', 
+  #                    mar_prop = seq(from = 0, to = .9, length.out = 3000),
+  #                    type = 'mar'),
+  correlate = list(random =  data.frame(x = c('int_id', 'int_id', 
+                                              'x_id'),
+                                        y = c('x_id', 'y_id',
+                                              'y_id'),
+                            corr = c(-0.5, 0.5,
+                                     -0.9))),
+    sample_size = list(level1 = 15, level2 = 200)
+
+)
+
+# simulate data
+data_w_missing <- sim_arguments %>%
+  simulate_fixed(data = NULL, .) %>%
+  simulate_randomeffect(sim_arguments) %>%
+  correlate_variables(sim_arguments) %>%
+  simulate_error(sim_arguments) %>%
+  generate_response(sim_arguments) #%>%
+  #generate_missing(sim_arguments)
+
+#prop.table(table(is.na(data_w_missing$m_missing)))
+test_data <- data_w_missing %>%
+  mutate(x_sq = x^2,
+         int = x*y,
+         y_sq = y^2)
+
+data_fit <- lmer(m ~ 1 + x + y + x_sq + int + y_sq + (1 + x + y + x_sq + int + y_sq| id), 
+            data = test_data, 
+            na.action = na.omit)
+summary(data_fit)
+x_coef <- fixef(data_fit)[2]
+y_coef <- fixef(data_fit)[3]
+xsq_coef <- fixef(data_fit)[4]
+int_coef <- fixef(data_fit)[5]
+ysq_coef <- fixef(data_fit)[6]
+
+testing_blk <- test_data %>%
+  mutate(alpha =  x_coef*x + y_coef*y + 
+         xsq_coef*x_sq + int_coef*int + ysq_coef*y_sq )
+
+data_fit_blk <- lmer(m ~ 1+alpha + (1+ alpha|id),
+            data = testing_blk,
+            na.action = na.omit)
+summary(data_fit_blk)
+
+
+rf <- ranef(data_fit)$id %>%
+  select(RandomIntercept = 1, RandomSlope_x = 2, RandomSlope_y =3) %>%
+  rownames_to_column("id") %>%
+  mutate(id = as.integer(id))
+ggplot(rf, aes(x = RandomSlope_x, y = RandomSlope_y)) + geom_point()
+
+dataset <- test_data %>%
+  mutate(
+    Resid = resid(data_fit),
+    Fixed = predict(data_fit, re.form = ~0)
+  )
+
+rf %>%
+  arrange(desc(abs(RandomSlope_x))) %>%
+  slice(1:9) %>%
+  inner_join(dataset, by = "id") %>%
+  ggplot(aes(x = x, y = y - Fixed)) + 
+  geom_point() + 
+  geom_hline(yintercept = 0, linetype = 2) + 
+  geom_abline(aes(intercept = RandomIntercept, slope = RandomSlope_x)) +
+    geom_abline(aes(intercept = RandomIntercept, slope = RandomSlope_y)) +
+
+  facet_wrap(~id)
+# mplus_data <- test_data %>%
+#   replace(., is.na(.), -99)
+# library(writexl)
+# write_xlsx(mplus_data, "mplus_data.xlsx")
+```
+
+
+## 2.4 low correlations among random effects
+```{r}
+# set seed
+set.seed(1) 
+# set parameters of model to be simulated
+sim_arguments <- list(
+  formula = m ~ 1 +  x + y + z + (1 + x + y| id), 
+  reg_weights = c(4, -0.001, -0.01168, 0.1),
+  fixed = list(#time = list(var_type = 'time'),
+               x = list(var_type = 'continuous', mean = 0, sd = 2),
+               y = list(var_type = 'continuous', mean = 0, sd = 2),
+               z = list(var_type = "continuous", mean = 0, sd = 1)
+               #weight = list(var_type = 'continuous', mean = 180, sd = 30),
+               #age = list(var_type = 'ordinal', levels = 30:60),
+               #sex = list(var_type = 'factor', levels = c('male', 'female'))
+               ),
+  randomeffect = list(int_id = list(variance = 0.03, var_level = 2),
+                      x_id = list(variance = 0.01, var_level =2),
+                      y_id = list(variance = 0.02, var_level =2)),
+  # missing_data = list(new_outcome = 'm_missing', miss_cov = 'weight', 
+  #                    mar_prop = seq(from = 0, to = .9, length.out = 3000),
+  #                    type = 'mar'),
+  correlate = list(random =  data.frame(x = c('int_id', 'int_id', 
+                                              'x_id'),
+                                        y = c('x_id', 'y_id',
+                                              'y_id'),
+                            corr = c(-0.01, 0.01,
+                                     -0.01))),
+    sample_size = list(level1 = 15, level2 = 200)
+
+)
+
+# simulate data
+data_w_missing <- sim_arguments %>%
+  simulate_fixed(data = NULL, .) %>%
+  simulate_randomeffect(sim_arguments) %>%
+  correlate_variables(sim_arguments) %>%
+  simulate_error(sim_arguments) %>%
+  generate_response(sim_arguments) #%>%
+  #generate_missing(sim_arguments)
+
+#prop.table(table(is.na(data_w_missing$m_missing)))
+test_data <- data_w_missing %>%
+  mutate(x_sq = x^2,
+         int = x*y,
+         y_sq = y^2)
+
+data_fit <- lmer(m ~ 1 + x + y + x_sq + int + y_sq + (1 + x + y + x_sq + int + y_sq| id), 
+            data = test_data, 
+            na.action = na.omit)
+summary(data_fit)
+x_coef <- fixef(data_fit)[2]
+y_coef <- fixef(data_fit)[3]
+xsq_coef <- fixef(data_fit)[4]
+int_coef <- fixef(data_fit)[5]
+ysq_coef <- fixef(data_fit)[6]
+
+testing_blk <- test_data %>%
+  mutate(alpha =  x_coef*x + y_coef*y + 
+         xsq_coef*x_sq + int_coef*int + ysq_coef*y_sq )
+
+data_fit_blk <- lmer(m ~ 1+alpha + (1+ alpha|id),
+            data = testing_blk,
+            na.action = na.omit)
+summary(data_fit_blk)
+
+# mplus_data <- test_data %>%
+#   replace(., is.na(.), -99)
+# library(writexl)
+# write_xlsx(mplus_data, "mplus_data.xlsx")
+```
+
+
+# testing block
+```{r}
+mplus_data <- data_w_missing %>%
+  replace(., is.na(.), -99)
+write_xlsx(mplus_data, "mplus_data.xlsx")
+test_data <- data_w_missing %>%
+  mutate(x_sq = x^2,
+         int_xy = x*y,
+         y_sq = y^2) 
+
+fit <- lmer(y_missing ~ 1 + time + weight + age + sex + x + y + x_sq + int_xy + y_sq  + (1 + time + x + y |id),
+            data = test_data, 
+            na.action = na.omit)
+summary(fit)
+
+test_data_bl <- test_data %>%
+  mutate(alpha = (0.2932176)*x + (0.0444915)*y + (-0.0013357)*x_sq + (0.0034135)*int_xy + 
+           (-0.0066364)*y_sq)
+
+fit_blk <- lmer(m ~ 1 + time + weight + age + sex + alpha + (1+ time|id),
+            data = test_data_bl,
+            na.action = na.omit)
+summary(fit_blk)
+
+```
+
+
+```{r}
+library(naniar)
+tmx_savedata <- read.table("tmx_savedata.dat", quote="\"", comment.char="")
+
+colnames(tmx_savedata) <- c("Y20SCORE", "T2TMXC_C", "T2TMXR_C", "T2TMXCSQ", "T2TMXCXR", "T2TMXRSQ", "T3TMTRUS", "BLOCKA", "BLOCKB", "Y11SCORE", "TEAMID")
+tmx_data <- tmx_savedata %>%
+  replace_with_na_all(condition = ~.x == -99)
+
+select(tmx_data, -BLOCKA, -BLOCKB, -Y11SCORE, -TEAMID) %>%
+cor(.)
+```
+
+
+```{r}
+library(naniar)
+library(haven)
+library(writexl)
+library(tidyverse)
+lmx_l1 <- read_sav("lmxnl1.sav")
+
+fit <- lmer(na2 ~ 1 + lmxcur + lmxpast + lmxcur2 + lmxx + lmxpast2  + (1 + lmxcur + lmxpast + lmxcur2 + lmxx + lmxpast2 |id),
+            data = lmx_l1, 
+            na.action = na.omit)
+summary(fit)
+VarCorr(fit)
+lmx_l1_t <- lmx_l1 %>%
+  mutate(test_blkna =  (-0.10394)*lmxcur + (-0.01168)*lmxpast + (0.08533)*lmxcur2 + (-0.08655)*lmxx + 0.05607*lmxpast2)
+
+fit_blk <- lmer(na2 ~ 1 + test_blkna + (1 + test_blkna |id),
+            data = lmx_l1_t, 
+            na.action = na.omit)
+summary(fit_blk)
+cor_data <- lmx_l1 %>%
+  dplyr::select(id, lmxcur, lmxpast, lmxcur2, lmxx, lmxpast2, na2)
+cor(cor_data)
+
+
+fit_fixed <- lmer(na2 ~ 1 + lagna + lmxcur + lmxpast + lmxcur2 + lmxx + lmxpast2  + (1 |id),
+            data = lmx_l1, 
+            na.action = na.omit)
+summary(fit_fixed)
+
+lmx_l1_t <- lmx_l1 %>%
+  mutate(test_blkna =  (-0.088204)*lmxcur + (0.088185)*lmxpast +  0.045889 *lmxcur2 + (-.049934 )*lmxx + 0.003199*lmxpast2)
+
+###fixed has no issues
+fit_fixed_blk <- lmer(na2 ~ 1 + lagna + test_blkna + (1  |id),
+            data = lmx_l1_t, 
+            na.action = na.omit)
+summary(fit_fixed_blk)
+
+mplus_data <- lmx_l1_t %>%
+  replace(., is.na(.), -99)
+write_xlsx(mplus_data, "mplus_data.xlsx")
+```
+
+# 3. Plotting
+```{r}
+library(multilevel)
+library(nlme)
+library(effects)
+library(tidyverse)
+library(pander)
+library(lme4)
+library(RSA)
+source("MultilevelRSA.r") # the R file with the functions
+```
+
+```{r}
+#using coefficients to plot
+plotRSA(x = -0.213, y = -0.013, x2 = 0.074, xy = -0.093, y2 = 0.02 , b0= 2.440,
+  surface = "predict", legend = FALSE,
+  axes = c("LOC", "LOIC", "int"),
+  project=c("LOC", "LOIC", "int"), 
+  type = "3d", #type = 3d interactive
+  #contour = list(show = TRUE, color = "grey40",highlight = c()),
+ # points = list(data = tibble::tibble(rsa_t$isre_c, rsa_t$isnd_c, rsa_t$jobsat), show = NA, value = "raw", jitter = 0, color = "black", cex = 0.1, out.mark = FALSE),
+  xlab="x", ylab="y", zlab="DV", main = "Testing model",
+  xlim=c(-3,3), ylim=c(-3,3), zlim=c(1.0, 5.0))
+
+
+```
+
+- interactive plot with python
+https://community.plotly.com/t/slicing-3d-surface-plot-along-a-user-selected-axis/40771/6
+
+https://community.plotly.com/t/slicing-3d-surface-plot-along-a-user-selected-axis/40771
+
+```{r}
+fig.update_layout(template='simple_white')
+fig.update_layout(title_font_family='Times New Roman')
+fig.update_layout(legend_font_family='Times New Roman') 
+```
+
+```{r}
+library(plotly)
+
+compose1 <- function(f, c) {
+  g <- function(y) f(c, y)
+  return(g)
+}
+
+compose2 <- function(f, c) {
+  g <- function(x) f(x, c)
+  return(g)
+}
+
+composefh <- function(f, h) {
+  g <- function(x) f(x, h(x))
+  return(g)
+}
+
+get_curve <- function(M, v, f) {
+  x0 <- M[1]
+  y0 <- M[2]
+  a <- v[1]
+  b <- v[2]
+  
+  if (a == 0 & b != 0) {
+    g <- compose1(f, x0)
+    id <- 1
+  } else if (a != 0 & b == 0) {
+    g <- compose2(f, y0)
+    id <- 2
+  } else {
+    h <- function(x) y0 + b * (x - x0) / a
+    g <- composefh(f, h(x))
+    id <- 3
+  }
+  return(list(g = g, id = id))
+}
+
+
+get_plane <- function(M, v, id, xx, yy, zz) {
+  x0 <- M[1]
+  y0 <- M[2]
+  a <- v[1]
+  b <- v[2]
+
+  if (id == 1) {
+    YZ <- expand.grid(yy, zz)
+    X <- matrix(rep(x0, nrow(YZ)), nrow = nrow(YZ), ncol = ncol(YZ))
+    Y <- matrix(YZ[,1], nrow = nrow(YZ), ncol = ncol(YZ))
+    Z <- matrix(YZ[,2], nrow = nrow(YZ), ncol = ncol(YZ))
+  } else if (id == 2) {
+    XZ <- expand.grid(xx, zz)
+    X <- matrix(XZ[,1], nrow = nrow(XZ), ncol = ncol(XZ))
+    Y <- matrix(rep(y0, nrow(XZ)), nrow = nrow(XZ), ncol = ncol(XZ))
+    Z <- matrix(XZ[,2], nrow = nrow(XZ), ncol = ncol(XZ))
+  } else if (id == 3) {
+    XZ <- expand.grid(xx, zz)
+    X <- matrix(XZ[,1], nrow = nrow(XZ), ncol = ncol(XZ))
+    Y <- matrix(y0 + b * (X - x0) / a, nrow = nrow(XZ), ncol = ncol(XZ))
+    Z <- matrix(XZ[,2], nrow = nrow(XZ), ncol = ncol(XZ))
+  } else {
+    X <- NULL
+    Y <- NULL
+    Z <- NULL
+  }
+
+  return(list(X = X, Y = Y, Z = Z))
+}
+
+f_surf <- function(x, y) {
+  2 + 0.1 * x + 0.3 * y + 0.1 * x^2 - 0.3 * x * y + 0.2 * y^2
+}
+
+xx <- seq(-3, 3, length.out = 300)
+yy <- seq(-3, 3, length.out = 300)
+x <- outer(xx, yy, FUN = function(a, b) a)
+y <- outer(xx, yy, FUN = function(a, b) b)
+z <- outer(xx, yy, FUN = f_surf)
+
+zz <- seq(1, 5, length.out = 100)
+
+M <- c(1, 1, 0)
+v <- c(1, 1, 0)
+curve_data <- get_curve(M, v, f_surf)
+g <- curve_data$g
+id <- curve_data$id
+
+plane_data <- get_plane(M, v, id, xx, yy, zz)
+X <- plane_data$X
+Y <- plane_data$Y
+Z <- plane_data$Z
+```
+
+
+```{r}
+
+# Plotting the surface and cutting plane
+fig <- plot_ly() %>%
+  add_surface(x = x, y = y, z = z, colorscale = "Viridis", showscale = FALSE) %>%
+  add_surface(x = xx, y = yy, z = Z, colorscale = list(c(0, 1), c("rgb(254, 254, 254)", "rgb(254, 254, 254)")), showscale = FALSE, opacity = 0.65) %>%
+add_trace(x = X[, 1], y = Y[, 1], z = Z[, 1], type = "scatter3d", mode = "lines", line = list(color = "rgba(50, 50, 50, 0.5)", width = 2)) %>%
+  layout(scene = list(xaxis = list(nticks = 5, range = c(-2, 2)),
+                    yaxis = list(nticks = 5, range = c(-2, 2)),
+                    zaxis = list(nticks = 5, range = c(1, 5), tickmode = "linear", tick0 = 1, dtick = 1)),
+       margin = list(r = 20, l = 10, b = 10, t = 10),
+       font = list(family = "Times New Roman"))
+
+fig
+
+```
+

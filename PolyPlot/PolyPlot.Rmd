@@ -4,3 +4,117 @@ author: "Sherry"
 date: "2023-04-14"
 output: html_document
 ---
+
+# 1. Create surface and cutting plane 
+```{r}
+library(plotly)
+
+compose1 <- function(f, c) {
+  g <- function(y) f(c, y)
+  return(g)
+}
+
+compose2 <- function(f, c) {
+  g <- function(x) f(x, c)
+  return(g)
+}
+
+composefh <- function(f, h) {
+  g <- function(x) f(x, h(x))
+  return(g)
+}
+
+get_curve <- function(M, v, f) {
+  x0 <- M[1]
+  y0 <- M[2]
+  a <- v[1]
+  b <- v[2]
+  
+  if (a == 0 & b != 0) {
+    g <- compose1(f, x0)
+    id <- 1
+  } else if (a != 0 & b == 0) {
+    g <- compose2(f, y0)
+    id <- 2
+  } else {
+    h <- function(x) y0 + b * (x - x0) / a
+    g <- composefh(f, h(x))
+    id <- 3
+  }
+  return(list(g = g, id = id))
+}
+
+
+get_plane <- function(M, v, id, xx, yy, zz) {
+  x0 <- M[1]
+  y0 <- M[2]
+  a <- v[1]
+  b <- v[2]
+
+  if (id == 1) {
+    YZ <- expand.grid(yy, zz)
+    X <- matrix(rep(x0, nrow(YZ)), nrow = nrow(YZ), ncol = ncol(YZ))
+    Y <- matrix(YZ[,1], nrow = nrow(YZ), ncol = ncol(YZ))
+    Z <- matrix(YZ[,2], nrow = nrow(YZ), ncol = ncol(YZ))
+  } else if (id == 2) {
+    XZ <- expand.grid(xx, zz)
+    X <- matrix(XZ[,1], nrow = nrow(XZ), ncol = ncol(XZ))
+    Y <- matrix(rep(y0, nrow(XZ)), nrow = nrow(XZ), ncol = ncol(XZ))
+    Z <- matrix(XZ[,2], nrow = nrow(XZ), ncol = ncol(XZ))
+  } else if (id == 3) {
+    XZ <- expand.grid(xx, zz)
+    X <- matrix(XZ[,1], nrow = nrow(XZ), ncol = ncol(XZ))
+    Y <- matrix(y0 + b * (X - x0) / a, nrow = nrow(XZ), ncol = ncol(XZ))
+    Z <- matrix(XZ[,2], nrow = nrow(XZ), ncol = ncol(XZ))
+  } else {
+    X <- NULL
+    Y <- NULL
+    Z <- NULL
+  }
+
+  return(list(X = X, Y = Y, Z = Z))
+}
+
+f_surf <- function(x, y) {
+  2 + 0.1 * x + 0.3 * y + 0.1 * x^2 - 0.3 * x * y + 0.2 * y^2
+}
+
+xx <- seq(-3, 3, length.out = 300)
+yy <- seq(-3, 3, length.out = 300)
+x <- outer(xx, yy, FUN = function(a, b) a)
+y <- outer(xx, yy, FUN = function(a, b) b)
+z <- outer(xx, yy, FUN = f_surf)
+
+zz <- seq(1, 5, length.out = 100)
+
+M <- c(1, 1, 0)
+v <- c(1, 1, 0)
+curve_data <- get_curve(M, v, f_surf)
+g <- curve_data$g
+id <- curve_data$id
+
+plane_data <- get_plane(M, v, id, xx, yy, zz)
+X <- plane_data$X
+Y <- plane_data$Y
+Z <- plane_data$Z
+```
+
+# 2. Plot 
+```{r}
+
+# Plotting the surface and cutting plane
+fig <- plot_ly() %>%
+  add_surface(x = x, y = y, z = z, colorscale = "Viridis", showscale = FALSE) %>%
+  add_surface(x = xx, y = yy, z = Z, colorscale = list(c(0, 1), c("rgb(254, 254, 254)", "rgb(254, 254, 254)")), showscale = FALSE, opacity = 0.65) %>%
+add_trace(x = X[, 1], y = Y[, 1], z = Z[, 1], type = "scatter3d", mode = "lines", line = list(color = "rgba(50, 50, 50, 0.5)", width = 2)) %>%
+  layout(scene = list(xaxis = list(nticks = 5, range = c(-2, 2)),
+                    yaxis = list(nticks = 5, range = c(-2, 2)),
+                    zaxis = list(nticks = 5, range = c(1, 5), tickmode = "linear", tick0 = 1, dtick = 1)),
+       margin = list(r = 20, l = 10, b = 10, t = 10),
+       font = list(family = "Times New Roman"))
+
+fig
+
+```
+
+
