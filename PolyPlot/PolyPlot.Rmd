@@ -4,11 +4,15 @@ author: "Sherry"
 date: "2023-04-14"
 output: html_document
 ---
+```{r}
+install.packages("plotly")
+install.packages("ggplot2")
+library(plotly)
+library(ggplot2)
+```
 
 # 1. Create surface and cutting plane 
 ```{r}
-library(plotly)
-
 compose1 <- function(f, c) {
   g <- function(y) f(c, y)
   return(g)
