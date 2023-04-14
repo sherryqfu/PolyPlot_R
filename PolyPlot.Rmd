@@ -9,6 +9,7 @@ output: html_document
 #install.packages("ggplot2")
 library(plotly)
 library(ggplot2)
+library(tidyverse)
 ```
 
 # 1. Create surface and cutting plane 
@@ -105,19 +106,17 @@ Z <- plane_data$Z
 
 # 2. Plot 
 ```{r}
-
-# Plotting the surface and cutting plane
-fig <- plot_ly() %>%
+figure <- plot_ly() %>%
   add_surface(x = x, y = y, z = z, colorscale = "Viridis", showscale = FALSE) %>%
   add_surface(x = xx, y = yy, z = Z, colorscale = list(c(0, 1), c("rgb(254, 254, 254)", "rgb(254, 254, 254)")), showscale = FALSE, opacity = 0.65) %>%
 add_trace(x = X[, 1], y = Y[, 1], z = Z[, 1], type = "scatter3d", mode = "lines", line = list(color = "rgba(50, 50, 50, 0.5)", width = 2)) %>%
   layout(scene = list(xaxis = list(nticks = 5, range = c(-2, 2)),
                     yaxis = list(nticks = 5, range = c(-2, 2)),
-                    zaxis = list(nticks = 5, range = c(1, 5), tickmode = "linear", tick0 = 1, dtick = 1)),
+                    zaxis = list(nticks = 5, range = c(1, 5), tickmode = "linear", tick0 = 1, dtick = 1), showbackground = FALSE),
        margin = list(r = 20, l = 10, b = 10, t = 10),
        font = list(family = "Times New Roman"))
 
-fig
+figure
 
 ```
 
