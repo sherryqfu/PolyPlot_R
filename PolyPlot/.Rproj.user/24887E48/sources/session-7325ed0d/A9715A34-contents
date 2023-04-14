@@ -5,8 +5,8 @@ date: "2023-04-14"
 output: html_document
 ---
 ```{r}
-install.packages("plotly")
-install.packages("ggplot2")
+#install.packages("plotly")
+#install.packages("ggplot2")
 library(plotly)
 library(ggplot2)
 ```
