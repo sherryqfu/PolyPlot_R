@@ -12,7 +12,7 @@ library(ggplot2)
 library(tidyverse)
 ```
 
-# 1. Create surface and cutting plane 
+## 1. Create surface and cutting plane 
 ```{r}
 compose1 <- function(f, c) {
   g <- function(y) f(c, y)
@@ -104,7 +104,7 @@ Y <- plane_data$Y
 Z <- plane_data$Z
 ```
 
-# 2. Plot 
+## 2. Plot 
 ```{r}
 figure <- plot_ly() %>%
   add_surface(x = x, y = y, z = z, colorscale = list(list(0, "rgba(150, 150, 150, 0.1)"), list(1, "rgba(150, 150, 150, 0.1)")), showscale = FALSE, 
